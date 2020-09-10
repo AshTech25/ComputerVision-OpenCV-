@@ -1,0 +1,52 @@
+from collections import deque
+from queue import Queue
+from threading import Thread
+import cv2
+import time
+
+class KeyClipWriter:
+    def __init__(self,bufferSize=64,sleeptime=1.0):
+        self.bufferSize=bufferSize
+        self.sleeptime=sleeptime
+        self.Recording=False
+        self._write=None
+        self.frame=deque(maxlen=bufferSize)
+        self.Q=None
+        self.thread=None
+    def start(self,out_path,fourcc,fps):
+        self.Recording=True
+        self._write=cv2.VideoWriter(out_path,fourcc,fps,(self.frame[0].shape[1],self.frame[0].shape[0]),True)
+        self.Q=Queue()
+        for i in range(len(self.frame),0,-1):
+            self.Q.put(self.frame[i-1])
+        
+        
+        self.thread=Thread(target=self.write,args=())
+        self.thread.daemon=True
+        self.thread.start()
+    def update(self,frame):
+        self.frame.appendleft(frame)
+        if self.Recording:
+            self.Q.put(frame)
+    def write(self):
+        while True:
+            if not self.Recording:
+                return
+            if not self.Q.empty() :
+                frame=self.Q.get()
+                self._write.write(frame)
+            else:
+                time.sleep(self.sleeptime)
+    def flush(self):
+        while not self.Q.empty():
+            frame=self.Q.get()
+            self._write.write(frame)
+    def finish(self):
+        self.Recording=False
+        self.thread.join()
+        self.flush()
+        self._write.release()
+
+
+            
+
